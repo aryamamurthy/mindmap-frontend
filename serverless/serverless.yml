@@ -1,0 +1,316 @@
+service: mindmap-explorer-sls
+
+frameworkVersion: '4'
+
+plugins:
+  - serverless-python-requirements
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: python3.9
+  stage: ${opt:stage, 'dev'}
+  region: us-east-1
+  timeout: 29
+  memorySize: 256
+  architecture: x86_64
+  tracing:
+    apiGateway: true
+    lambda: true
+  environment:
+    SPACES_TABLE_NAME: ${self:service}-${self:provider.stage}-spaces
+    NODES_TABLE_NAME: ${self:service}-${self:provider.stage}-nodes
+    CONTENT_BUCKET_NAME: ${self:custom.contentBucketName}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Scan
+            - dynamodb:Query
+            - dynamodb:BatchWriteItem
+            - dynamodb:BatchGetItem
+          Resource:
+            - Fn::GetAtt: [SpacesTableSls, Arn]
+            - Fn::Join:
+                - "/"
+                - - Fn::GetAtt: [SpacesTableSls, Arn]
+                  - "index"
+                  - "*"
+            - Fn::GetAtt: [NodesTableSls, Arn]
+            - Fn::Join:
+                - "/"
+                - - Fn::GetAtt: [NodesTableSls, Arn]
+                  - "index"
+                  - "*"
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+            - s3:ListBucket
+          Resource:
+            - Fn::Join:
+                - ""
+                - - Fn::GetAtt: [ContentBucketSls, Arn]
+                  - "/*"
+            - Fn::GetAtt: [ContentBucketSls, Arn]
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "arn:aws:logs:*:*:*"
+        - Effect: Allow
+          Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+          Resource: "*"
+
+custom:
+  contentBucketName: ${self:service}-${self:provider.stage}-content-bucket-${self:custom.timestamp}
+  timestamp: ${env:TIMESTAMP, "default"}
+  pythonRequirements:
+    dockerizePip: false
+    slim: true
+  serverless-offline:
+    httpPort: 3000
+    websocketPort: 3001
+    lambdaPort: 3002
+
+package:
+  individually: true
+  patterns:
+    - '!./**'
+    - '../lambda_handlers/**'
+
+functions:
+  # Spaces Functions
+  spacesCreateSls:
+    name: MindMapSpacesCreateSls-${self:provider.stage}
+    handler: ../lambda_handlers/spaces_create_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces
+          method: post
+          cors: true
+  
+  spacesListSls:
+    name: MindMapSpacesListSls-${self:provider.stage}
+    handler: ../lambda_handlers/spaces_list_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces
+          method: get
+          cors: true
+  
+  spacesTreeSls:
+    name: MindMapSpacesTreeSls-${self:provider.stage}
+    handler: ../lambda_handlers/spaces_tree_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}
+          method: get
+          cors: true
+  
+  spacesUpdateSls:
+    name: MindMapSpacesUpdateSls-${self:provider.stage}
+    handler: ../lambda_handlers/spaces_update_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}
+          method: put
+          cors: true
+  
+  spacesDeleteSls:
+    name: MindMapSpacesDeleteSls-${self:provider.stage}
+    handler: ../lambda_handlers/spaces_delete_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}
+          method: delete
+          cors: true
+  
+  # Nodes Functions
+  nodesAddSls:
+    name: MindMapNodesAddSls-${self:provider.stage}
+    handler: ../lambda_handlers/nodes_add_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}/nodes
+          method: post
+          cors: true
+  
+  nodesGetSls:
+    name: MindMapNodesGetSls-${self:provider.stage}
+    handler: ../lambda_handlers/nodes_get_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}/nodes/{nodeId}
+          method: get
+          cors: true
+  
+  nodesUpdateSls:
+    name: MindMapNodesUpdateSls-${self:provider.stage}
+    handler: ../lambda_handlers/nodes_update_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}/nodes/{nodeId}
+          method: put
+          cors: true
+  
+  nodesDeleteSls:
+    name: MindMapNodesDeleteSls-${self:provider.stage}
+    handler: ../lambda_handlers/nodes_delete_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}/nodes/{nodeId}
+          method: delete
+          cors: true
+  
+  nodesReorderSls:
+    name: MindMapNodesReorderSls-${self:provider.stage}
+    handler: ../lambda_handlers/nodes_reorder_handler.lambda_handler
+    events:
+      - http:
+          path: /spaces/{spaceId}/nodes/reorder
+          method: post
+          cors: true
+
+resources:
+  Resources:
+    # DynamoDB Tables with different names from SAM template
+    SpacesTableSls:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.SPACES_TABLE_NAME}
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: ownerId
+            AttributeType: S
+          - AttributeName: spaceId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: OwnerIdIndex
+            KeySchema:
+              - AttributeName: ownerId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: SpaceIdIndex
+            KeySchema:
+              - AttributeName: spaceId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+
+    NodesTableSls:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.NODES_TABLE_NAME}
+        AttributeDefinitions:
+          - AttributeName: nodeId
+            AttributeType: S
+          - AttributeName: spaceId
+            AttributeType: S
+          - AttributeName: parentNodeId
+            AttributeType: S
+          - AttributeName: orderIndex
+            AttributeType: N
+        KeySchema:
+          - AttributeName: nodeId
+            KeyType: HASH
+          - AttributeName: spaceId
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: SpaceIdNodesIndex
+            KeySchema:
+              - AttributeName: spaceId
+                KeyType: HASH
+              - AttributeName: orderIndex
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ParentNodeIdIndex
+            KeySchema:
+              - AttributeName: parentNodeId
+                KeyType: HASH
+              - AttributeName: orderIndex
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+
+    # S3 Bucket with different name
+    ContentBucketSls:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.contentBucketName}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - DELETE
+                - HEAD
+              AllowedOrigins:
+                - "*"
+              MaxAge: 3000
+      DeletionPolicy: Retain
+
+    # Different IAM role name
+    MindMapLambdaExecutionRoleSls:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: MindMapLambdaExecutionRoleSls-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+
+  Outputs:
+    ApiEndpointSls:
+      Description: "API Gateway endpoint URL"
+      Value: 
+        Fn::Join:
+          - ""
+          - - "https://"
+            - Ref: ApiGatewayRestApi
+            - ".execute-api."
+            - Ref: AWS::Region
+            - ".amazonaws.com/"
+            - ${self:provider.stage}
+    ContentBucketNameSls:
+      Description: "Name of the S3 bucket for content"
+      Value:
+        Ref: ContentBucketSls
+    SpacesTableNameSls:
+      Description: "Name of the DynamoDB table for Spaces"
+      Value:
+        Ref: SpacesTableSls
+    NodesTableNameSls:
+      Description: "Name of the DynamoDB table for Nodes"
+      Value:
+        Ref: NodesTableSls
