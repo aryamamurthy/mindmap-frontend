@@ -2,6 +2,18 @@ import json
 import boto3
 import os
 import datetime
+import decimal
+
+# Helper class to convert Decimal to float/int for JSON serialization
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            # Convert decimal to int or float
+            if o % 1 > 0:
+                return float(o)
+            else:
+                return int(o)
+        return super(DecimalEncoder, self).default(o)
 
 dynamodb = boto3.resource('dynamodb')
 spaces_table_name = os.environ.get('SPACES_TABLE_NAME', 'Spaces') # Default to 'Spaces' if not set
@@ -54,29 +66,27 @@ def lambda_handler(event, context):
 
         update_expression = 'SET ' + ', '.join(update_expression_parts)
 
+        # Use the correct key format for the Spaces table
         params = {
             'Key': {
-                'spaceId': space_id
+                'PK': f"SPACE#{space_id}",
+                'SK': "META"
             },
             'UpdateExpression': update_expression,
             'ExpressionAttributeValues': expression_attribute_values,
-            'ReturnValues': 'UPDATED_NEW'
+            'ReturnValues': 'ALL_NEW'  # Return all attributes of the updated item
         }
         if expression_attribute_names: # Add if there are any reserved keywords used
             params['ExpressionAttributeNames'] = expression_attribute_names
 
-
-        # Check if the item exists before updating
-        # Note: A more robust check might involve a GetItem first or conditional update
-        # For simplicity, we proceed with the update and handle potential errors.
-        # A ConditionExpression like 'attribute_exists(spaceId)' could be used.
-
+        # Update the item
         response = spaces_table.update_item(**params)
+        attributes = response.get('Attributes', {})
 
         return {
             'statusCode': 200,
             'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps(response.get('Attributes', {}))
+            'body': json.dumps(attributes, cls=DecimalEncoder)
         }
 
     except Exception as e:

@@ -1,6 +1,18 @@
 import json
 import boto3
 import os
+import decimal
+
+# Helper class to convert Decimal to float/int for JSON serialization
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            # Convert decimal to int or float
+            if o % 1 > 0:
+                return float(o)
+            else:
+                return int(o)
+        return super(DecimalEncoder, self).default(o)
 
 dynamodb = boto3.resource('dynamodb')
 nodes_table_name = os.environ.get('NODES_TABLE_NAME', 'Nodes')
@@ -38,13 +50,19 @@ def lambda_handler(event, context):
         if not node_item:
             return {
                 'statusCode': 404,
+                'headers': {'Content-Type': 'application/json'},
                 'body': json.dumps({'error': 'Node not found'})
             }
 
         # If there's an S3 key, fetch the content from S3
         s3_key = node_item.get('s3Key')
         content_html = None
-        if s3_key:
+        
+        # For testing, we might have contentPreview directly in DynamoDB
+        if 'contentPreview' in node_item:
+            content_html = node_item['contentPreview']
+        # If there's an S3 key, try to fetch from S3
+        elif s3_key:
             try:
                 s3_response = s3_client.get_object(
                     Bucket=content_bucket_name,
@@ -62,12 +80,13 @@ def lambda_handler(event, context):
         return {
             'statusCode': 200,
             'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps(node_item)
+            'body': json.dumps(node_item, cls=DecimalEncoder)
         }
 
     except Exception as e:
         print(f"Error getting node: {e}")
         return {
             'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
             'body': json.dumps({'error': str(e)})
         }

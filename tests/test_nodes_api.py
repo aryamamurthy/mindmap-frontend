@@ -1,6 +1,6 @@
 import requests
 import pytest
-from tests.config import API_BASE_URL
+from config import API_BASE_URL
 
 # Helper to print request/response verbosely
 def verbose_print(label, value):
@@ -16,7 +16,7 @@ def test_space():
         "ownerId": "pytest_user"
     }
     resp = requests.post(url, json=payload)
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     space_id = resp.json()["spaceId"]
     yield space_id
     # Cleanup
@@ -28,15 +28,14 @@ def test_add_get_update_delete_node(test_space):
     url = f"{API_BASE_URL}/spaces/{space_id}/nodes"
     payload = {
         "title": "Root Node",
-        "content": "Main idea",
-        "s3Key": None,
+        "contentHTML": "Main idea",
         "parentNodeId": None,
         "orderIndex": 0
     }
     verbose_print("POST /spaces/{spaceId}/nodes Payload", payload)
     resp = requests.post(url, json=payload)
     verbose_print("POST /spaces/{spaceId}/nodes Response", f"Status: {resp.status_code}\nBody: {resp.text}")
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     node = resp.json()
     node_id = node["nodeId"]
 
@@ -49,7 +48,7 @@ def test_add_get_update_delete_node(test_space):
 
     # Update node
     update_url = f"{API_BASE_URL}/spaces/{space_id}/nodes/{node_id}"
-    update_payload = {"title": "Updated Node", "content": "Updated content"}
+    update_payload = {"title": "Updated Node", "contentHTML": "Updated content"}
     resp = requests.put(update_url, json=update_payload)
     verbose_print("PUT /spaces/{spaceId}/nodes/{nodeId} Response", f"Status: {resp.status_code}\nBody: {resp.text}")
     assert resp.status_code == 200
@@ -59,7 +58,7 @@ def test_add_get_update_delete_node(test_space):
     del_url = f"{API_BASE_URL}/spaces/{space_id}/nodes/{node_id}"
     resp = requests.delete(del_url)
     verbose_print("DELETE /spaces/{spaceId}/nodes/{nodeId} Response", f"Status: {resp.status_code}\nBody: {resp.text}")
-    assert resp.status_code == 200
+    assert resp.status_code == 204  # No Content response for successful deletion
 
     # Confirm deleted
     resp = requests.get(get_url)
@@ -72,30 +71,28 @@ def test_recursive_node_deletion(test_space):
     url = f"{API_BASE_URL}/spaces/{space_id}/nodes"
     root_payload = {
         "title": "Root",
-        "content": "Root node",
-        "s3Key": None,
+        "contentHTML": "Root node",
         "parentNodeId": None,
         "orderIndex": 0
     }
     resp = requests.post(url, json=root_payload)
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     root_id = resp.json()["nodeId"]
     # Add child node
     child_payload = {
         "title": "Child",
-        "content": "Child node",
-        "s3Key": None,
+        "contentHTML": "Child node",
         "parentNodeId": root_id,
         "orderIndex": 0
     }
     resp = requests.post(url, json=child_payload)
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     child_id = resp.json()["nodeId"]
     # Delete root node (should delete child too)
     del_url = f"{API_BASE_URL}/spaces/{space_id}/nodes/{root_id}"
     resp = requests.delete(del_url)
     verbose_print("DELETE /spaces/{spaceId}/nodes/{root_id} (recursive) Response", f"Status: {resp.status_code}\nBody: {resp.text}")
-    assert resp.status_code == 200
+    assert resp.status_code == 204
     # Confirm both deleted
     resp = requests.get(f"{API_BASE_URL}/spaces/{space_id}/nodes/{root_id}")
     assert resp.status_code == 404

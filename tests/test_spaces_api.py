@@ -1,6 +1,6 @@
 import requests
 import pytest
-from tests.config import API_BASE_URL
+from config import API_BASE_URL
 import uuid
 
 # Helper to print request/response verbosely
@@ -17,10 +17,9 @@ def test_create_space():
     verbose_print("POST /spaces Payload", payload)
     resp = requests.post(url, json=payload)
     verbose_print("POST /spaces Response", f"Status: {resp.status_code}\nBody: {resp.text}")
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     data = resp.json()
     assert "spaceId" in data
-    return data["spaceId"]
 
 def test_list_spaces():
     url = f"{API_BASE_URL}/spaces"
@@ -39,7 +38,7 @@ def test_space_lifecycle():
     }
     resp = requests.post(url, json=payload)
     verbose_print("POST /spaces (lifecycle) Response", f"Status: {resp.status_code}\nBody: {resp.text}")
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     space = resp.json()
     space_id = space["spaceId"]
 
@@ -62,7 +61,7 @@ def test_space_lifecycle():
     del_url = f"{API_BASE_URL}/spaces/{space_id}"
     resp = requests.delete(del_url)
     verbose_print("DELETE /spaces/{spaceId} Response", f"Status: {resp.status_code}\nBody: {resp.text}")
-    assert resp.status_code == 200
+    assert resp.status_code == 204  # No Content response for successful deletion
 
     # Confirm deleted
     resp = requests.get(get_url)

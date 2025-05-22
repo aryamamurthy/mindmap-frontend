@@ -57,7 +57,8 @@ def lambda_handler(event, context):
         # 2. Delete the space itself
         spaces_table.delete_item(
             Key={
-                'spaceId': space_id
+                'PK': f"SPACE#{space_id}",
+                'SK': "META"
             }
         )
 
