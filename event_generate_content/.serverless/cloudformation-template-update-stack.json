@@ -1,0 +1,315 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "The AWS CloudFormation template for this Serverless application",
+  "Resources": {
+    "GenerateNodeContentLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "/aws/lambda/mindmap-content-generator-dev-generateNodeContent"
+      }
+    },
+    "IamRoleLambdaExecution": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Join": [
+                "-",
+                [
+                  "mindmap-content-generator",
+                  "dev",
+                  "lambda"
+                ]
+              ]
+            },
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:CreateLogGroup",
+                    "logs:TagResource"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/mindmap-content-generator-dev*:*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/mindmap-content-generator-dev*:*:*"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan"
+                  ],
+                  "Resource": [
+                    "arn:aws:dynamodb:us-east-1:*:table/mindmap-explorer-sls-dev-nodes",
+                    "arn:aws:dynamodb:us-east-1:*:table/mindmap-explorer-sls-dev-nodes/index/*"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": "arn:aws:s3:::serverless-framework-deployments-us-east-1-bdfd491e-cce3/*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock-runtime:InvokeModel"
+                  ],
+                  "Resource": [
+                    "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-text-express-v1",
+                    "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-*",
+                    "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-*",
+                    "arn:aws:bedrock:us-east-1::foundation-model/meta.llama*",
+                    "arn:aws:bedrock:us-east-1::foundation-model/mistral.mixtral*",
+                    "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "arn:aws:logs:*:*:*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "events:PutEvents"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "sqs:SendMessage",
+                    "sqs:GetQueueUrl",
+                    "sqs:GetQueueAttributes"
+                  ],
+                  "Resource": "arn:aws:sqs:us-east-1:789382030027:mindmap-content-generator-dev-dlq"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "sqs:SendMessage",
+                  "Resource": "arn:aws:sqs:us-east-1:789382030027:mindmap-content-generator-dev-dlq"
+                }
+              ]
+            }
+          }
+        ],
+        "Path": "/",
+        "RoleName": {
+          "Fn::Join": [
+            "-",
+            [
+              "mindmap-content-generator",
+              "dev",
+              {
+                "Ref": "AWS::Region"
+              },
+              "lambdaRole"
+            ]
+          ]
+        }
+      }
+    },
+    "GenerateNodeContentLambdaFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": "serverless-framework-deployments-us-east-1-bdfd491e-cce3",
+          "S3Key": "serverless/mindmap-content-generator/dev/1747997370313-2025-05-23T10:49:30.313Z/mindmap-content-generator.zip"
+        },
+        "Handler": "nodes_generate_content_handler.lambda_handler",
+        "Runtime": "python3.9",
+        "FunctionName": "mindmap-content-generator-dev-generateNodeContent",
+        "MemorySize": 1024,
+        "Timeout": 60,
+        "Description": "Generates AI content for new mind map nodes",
+        "Environment": {
+          "Variables": {
+            "NODES_TABLE_NAME": "mindmap-explorer-sls-dev-nodes",
+            "CONTENT_BUCKET_NAME": "serverless-framework-deployments-us-east-1-bdfd491e-cce3",
+            "BEDROCK_MODEL_ID": "amazon.nova-micro-v1:0",
+            "EVENT_BUS_NAME": "mindmap-events-bus-dev"
+          }
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "IamRoleLambdaExecution",
+            "Arn"
+          ]
+        }
+      },
+      "DependsOn": [
+        "GenerateNodeContentLogGroup"
+      ]
+    },
+    "GenerateNodeContentLambdaVersion1UDYg9tldX66QIK9FWO8LdJLFouopP1tF2tGg5PskE": {
+      "Type": "AWS::Lambda::Version",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "GenerateNodeContentLambdaFunction"
+        },
+        "CodeSha256": "C1SIAi6g0j8FM22G6qiNcwobwIV9qQoPYNJx2YNu8O8=",
+        "Description": "Generates AI content for new mind map nodes"
+      }
+    },
+    "GenerateNodeContentLambdaEvConf": {
+      "Type": "AWS::Lambda::EventInvokeConfig",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "GenerateNodeContentLambdaFunction"
+        },
+        "DestinationConfig": {
+          "OnFailure": {
+            "Destination": "arn:aws:sqs:us-east-1:789382030027:mindmap-content-generator-dev-dlq"
+          }
+        },
+        "Qualifier": "$LATEST"
+      }
+    },
+    "MindmapDasheventsDashbusDashdevEventBridgeEventBus": {
+      "Type": "AWS::Events::EventBus",
+      "Properties": {
+        "Name": "mindmap-events-bus-dev"
+      }
+    },
+    "MindmapcontentgeneratordevgenerateNodeContentrule1EventBridgeRule": {
+      "Type": "AWS::Events::Rule",
+      "DependsOn": "MindmapDasheventsDashbusDashdevEventBridgeEventBus",
+      "Properties": {
+        "EventBusName": "mindmap-events-bus-dev",
+        "EventPattern": {
+          "source": [
+            "mindmap-content-events"
+          ],
+          "detail-type": [
+            "MindMapNode Created",
+            "MindMapNode Updated"
+          ]
+        },
+        "Name": "mindmap-content-generator-dev-generateNodeContent-rule-1",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "GenerateNodeContentLambdaFunction",
+                "Arn"
+              ]
+            },
+            "Id": "mindmap-content-generator-dev-generateNodeContent-rule-1-target"
+          }
+        ]
+      }
+    },
+    "GenerateNodeContentEventBridgeLambdaPermission1": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "GenerateNodeContentLambdaFunction",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            ":",
+            [
+              "arn",
+              {
+                "Ref": "AWS::Partition"
+              },
+              "events",
+              {
+                "Ref": "AWS::Region"
+              },
+              {
+                "Ref": "AWS::AccountId"
+              },
+              {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "rule",
+                    "mindmap-events-bus-dev",
+                    "mindmap-content-generator-dev-generateNodeContent-rule-1"
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "NodeContentDLQ": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "QueueName": "mindmap-content-generator-dev-dlq",
+        "MessageRetentionPeriod": 1209600
+      }
+    }
+  },
+  "Outputs": {
+    "ServerlessDeploymentBucketName": {
+      "Value": "serverless-framework-deployments-us-east-1-bdfd491e-cce3",
+      "Export": {
+        "Name": "sls-mindmap-content-generator-dev-ServerlessDeploymentBucketName"
+      }
+    },
+    "GenerateNodeContentLambdaFunctionQualifiedArn": {
+      "Description": "Current Lambda function version",
+      "Value": {
+        "Ref": "GenerateNodeContentLambdaVersion1UDYg9tldX66QIK9FWO8LdJLFouopP1tF2tGg5PskE"
+      },
+      "Export": {
+        "Name": "sls-mindmap-content-generator-dev-GenerateNodeContentLambdaFunctionQualifiedArn"
+      }
+    }
+  }
+}

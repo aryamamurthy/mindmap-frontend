@@ -1,0 +1,112 @@
+service: mindmap-content-generator
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 1024
+  timeout: 60
+  environment:
+    NODES_TABLE_NAME: ${self:custom.nodesTableName}
+    CONTENT_BUCKET_NAME: ${self:custom.contentBucketName}
+    BEDROCK_MODEL_ID: ${self:custom.bedrockModelId}
+    EVENT_BUS_NAME: ${self:custom.eventBusName}
+  iam:
+    role:
+      statements:
+        # DynamoDB permissions
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.nodesTableName}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.nodesTableName}/index/*
+        # S3 permissions
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource: arn:aws:s3:::${self:custom.contentBucketName}/*
+        # Bedrock permissions
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+            - bedrock-runtime:InvokeModel
+          Resource:
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/amazon.titan-text-express-v1
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/anthropic.claude-*
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/amazon.titan-*
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/meta.llama*
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/mistral.mixtral*
+            - arn:aws:bedrock:${self:provider.region}::foundation-model/amazon.nova-micro-v1:0
+        # CloudWatch Logs permissions
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: arn:aws:logs:*:*:*
+        # EventBridge permissions (for publishing events, not required for trigger)
+        - Effect: Allow
+          Action:
+            - events:PutEvents
+          Resource: '*'
+        # SQS permissions for DLQ
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+            - sqs:GetQueueUrl
+            - sqs:GetQueueAttributes
+          Resource: arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:custom.dlqName}
+
+custom:
+  nodesTableName: mindmap-explorer-sls-dev-nodes
+  # Use the correct bucket name as provided
+  contentBucketName: serverless-framework-deployments-us-east-1-bdfd491e-cce3
+  bedrockModelId: amazon.nova-micro-v1:0
+  dlqName: mindmap-content-generator-dev-dlq
+  eventBusName: mindmap-events-bus-${self:provider.stage}
+
+functions:
+  generateNodeContent:
+    handler: nodes_generate_content_handler.lambda_handler
+    description: Generates AI content for new mind map nodes
+    # Remove any reference to lambda_handlers or serverless/lambda_handlers for this Lambda in this stack.
+    # The handler is nodes_generate_content_handler.lambda_handler and the file is at the root of the deployment package.
+    events:
+      - eventBridge:
+          eventBus: ${self:custom.eventBusName}
+          pattern:
+            source:
+              - mindmap-content-events
+            detail-type:
+              - 'MindMapNode Created'
+              - 'MindMapNode Updated'
+    destinations:
+      onFailure: "arn:aws:sqs:${self:provider.region}:${aws:accountId}:${self:custom.dlqName}"
+
+package:
+  individually: false
+  patterns:
+    - '!./**'
+    - 'nodes_generate_content_handler.py'
+    - 'bedrock_client.py'
+    - 's3_utils.py'
+    - 'dynamo_utils.py'
+    - 'requirements.txt'
+
+resources:
+  Resources:
+    # Dead Letter Queue
+    NodeContentDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.dlqName}
+        MessageRetentionPeriod: 1209600 # 14 days
+    # ContentBucket resource removed to avoid duplicate creation
