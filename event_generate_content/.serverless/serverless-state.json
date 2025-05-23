@@ -203,7 +203,7 @@
             "Properties": {
               "Code": {
                 "S3Bucket": "serverless-framework-deployments-us-east-1-bdfd491e-cce3",
-                "S3Key": "serverless/mindmap-content-generator/dev/1747997370313-2025-05-23T10:49:30.313Z/mindmap-content-generator.zip"
+                "S3Key": "serverless/mindmap-content-generator/dev/1747998735011-2025-05-23T11:12:15.011Z/mindmap-content-generator.zip"
               },
               "Handler": "nodes_generate_content_handler.lambda_handler",
               "Runtime": "python3.9",
@@ -230,14 +230,14 @@
               "GenerateNodeContentLogGroup"
             ]
           },
-          "GenerateNodeContentLambdaVersion1UDYg9tldX66QIK9FWO8LdJLFouopP1tF2tGg5PskE": {
+          "GenerateNodeContentLambdaVersion1tupmUeWyTUVA9DEZbwJq4WWcEphejNtHLRLuNEpQk": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "GenerateNodeContentLambdaFunction"
               },
-              "CodeSha256": "C1SIAi6g0j8FM22G6qiNcwobwIV9qQoPYNJx2YNu8O8=",
+              "CodeSha256": "y0AjYPi7KX4EWVNdrFDkE7St694hpWoGqYLADJl31qs=",
               "Description": "Generates AI content for new mind map nodes"
             }
           },
@@ -346,7 +346,7 @@
           "GenerateNodeContentLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "GenerateNodeContentLambdaVersion1UDYg9tldX66QIK9FWO8LdJLFouopP1tF2tGg5PskE"
+              "Ref": "GenerateNodeContentLambdaVersion1tupmUeWyTUVA9DEZbwJq4WWcEphejNtHLRLuNEpQk"
             },
             "Export": {
               "Name": "sls-mindmap-content-generator-dev-GenerateNodeContentLambdaFunctionQualifiedArn"
@@ -387,7 +387,7 @@
         "timeout": 60,
         "runtime": "python3.9",
         "vpc": {},
-        "versionLogicalId": "GenerateNodeContentLambdaVersion1UDYg9tldX66QIK9FWO8LdJLFouopP1tF2tGg5PskE"
+        "versionLogicalId": "GenerateNodeContentLambdaVersion1tupmUeWyTUVA9DEZbwJq4WWcEphejNtHLRLuNEpQk"
       }
     },
     "resources": {
@@ -428,7 +428,7 @@
         "artifactsS3KeyDirname": "serverless/mindmap-content-generator/dev/code-artifacts",
         "deploymentBucket": "serverless-framework-deployments-us-east-1-bdfd491e-cce3",
         "artifact": "C:\\Users\\Aryama Vinay Murthy\\Desktop\\mind_map_explorer\\event_generate_content\\.serverless\\mindmap-content-generator.zip",
-        "artifactDirectoryName": "serverless/mindmap-content-generator/dev/1747997370313-2025-05-23T10:49:30.313Z"
+        "artifactDirectoryName": "serverless/mindmap-content-generator/dev/1747998735011-2025-05-23T11:12:15.011Z"
       },
       "resources": {
         "$ref": "$[\"service\"][\"resources\"]"
@@ -441,7 +441,7 @@
   },
   "package": {
     "individually": false,
-    "artifactDirectoryName": "serverless/mindmap-content-generator/dev/1747997370313-2025-05-23T10:49:30.313Z",
+    "artifactDirectoryName": "serverless/mindmap-content-generator/dev/1747998735011-2025-05-23T11:12:15.011Z",
     "artifact": "mindmap-content-generator.zip"
   }
 }
