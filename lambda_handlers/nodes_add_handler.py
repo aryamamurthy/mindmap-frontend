@@ -9,6 +9,10 @@ nodes_table_name = os.environ.get('NODES_TABLE_NAME', 'Nodes') # Default to 'Nod
 nodes_table = dynamodb.Table(nodes_table_name)
 s3_client = boto3.client('s3')
 content_bucket_name = os.environ.get('CONTENT_BUCKET_NAME', 'mindmap-content-bucket') # Default bucket name
+eventbridge_client = boto3.client('events')
+event_bus_name = os.environ.get('EVENT_BUS_NAME', 'mindmap-events-bus-dev')
+eventbridge_client = boto3.client('events')
+event_bus_name = os.environ.get('EVENT_BUS_NAME', 'mindmap-events-bus-dev')
 
 def lambda_handler(event, context):
     """
@@ -63,10 +67,35 @@ def lambda_handler(event, context):
         
         # Only add parentNodeId if it's not None to avoid index issues
         if parent_node_id is not None:
-            node_item['parentNodeId'] = parent_node_id
-
-        # Add the item to DynamoDB
+            node_item['parentNodeId'] = parent_node_id        # Add the item to DynamoDB
         nodes_table.put_item(Item=node_item)
+        
+        # Publish event for content generation (only if no content provided)
+        if not content_html:
+            try:
+                event_detail = {
+                    'nodeId': node_id,
+                    'spaceId': space_id,
+                    'title': title,
+                    'parentNodeId': parent_node_id,
+                    'orderIndex': order_index,
+                    'createdAt': created_at
+                }
+                
+                eventbridge_client.put_events(
+                    Entries=[
+                        {
+                            'Source': 'mindmap-content-events',
+                            'DetailType': 'MindMapNode Created',
+                            'Detail': json.dumps(event_detail),
+                            'EventBusName': event_bus_name
+                        }
+                    ]
+                )
+                print(f"Published node creation event for {node_id}")
+            except Exception as e:
+                print(f"Failed to publish event: {e}")
+                # Don't fail the whole operation if event publishing fails
 
         return {
             'statusCode': 201,
