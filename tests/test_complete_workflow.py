@@ -15,7 +15,7 @@ import time
 import uuid
 import os
 from config import API_BASE_URL
-
+API_BASE_URL = "https://ozqiu4g1m7.execute-api.us-east-1.amazonaws.com/Prod"
 # AWS clients
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 s3 = boto3.client('s3', region_name='us-east-1')
@@ -35,7 +35,7 @@ def test_complete_mindmap_workflow():
         "ownerId": "test_user"
     }
     
-    space_response = requests.post(f"{API_BASE_URL}/spaces", json=space_payload)
+    space_response = requests.post(f"{API_BASE_URL}/spaces/", json=space_payload)
     assert space_response.status_code == 201, f"Space creation failed: {space_response.text}"
     
     space_data = space_response.json()
@@ -67,7 +67,7 @@ def test_complete_mindmap_workflow():
     print("EventBridge should trigger the content generation Lambda...")
     
     # Check DynamoDB for s3Key update (content generation complete)
-    nodes_table = dynamodb.Table('mindmap-explorer-sls-dev-nodes')
+    nodes_table = dynamodb.Table('MindMapNodes')
     max_attempts = 15  # 75 seconds max wait
     wait_time = 5
     content_generated = False
@@ -113,7 +113,7 @@ def test_complete_mindmap_workflow():
     print(f"✅ AI Content Retrieved (length: {len(content_html)} chars)")
     print(f"   Content preview: {content_html[:200]}...")
       # Verify content directly from S3
-    content_bucket = 'mindmap-explorer-sls-dev-content-bucket-1455341320'
+    content_bucket = 'aryamaapp-content-bucket02102005'
     try:
         s3_object = s3.get_object(Bucket=content_bucket, Key=s3_key)
         s3_content = s3_object['Body'].read().decode('utf-8')
@@ -190,23 +190,20 @@ def test_complete_mindmap_workflow():
     
     # Phase 8: Test Node Reordering
     print("\n🔄 Phase 8: Testing Node Reordering...")
-    
+
     # Reorder the child nodes
-    reorder_payload = {
-        "parentNodeId": root_node_id,
-        "order": [
-            created_children[2]['nodeId'],  # Neural Networks first
-            created_children[0]['nodeId'],  # Supervised Learning second
-            created_children[1]['nodeId']   # Unsupervised Learning third
-        ]
-    }
-    
+    reorder_payload = [
+        {"nodeId": created_children[2]['nodeId'], "newOrderIndex": 0},
+        {"nodeId": created_children[0]['nodeId'], "newOrderIndex": 1},
+        {"nodeId": created_children[1]['nodeId'], "newOrderIndex": 2}
+    ]
+
     reorder_response = requests.post(
         f"{API_BASE_URL}/spaces/{space_id}/nodes/reorder",
         json=reorder_payload
     )
     assert reorder_response.status_code == 200, f"Node reorder failed: {reorder_response.text}"
-    
+
     print("✅ Node reordering completed")
     
     # Phase 9: Final Verification

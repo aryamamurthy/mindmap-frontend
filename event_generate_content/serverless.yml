@@ -67,8 +67,8 @@ provider:
 
 custom:
   nodesTableName: mindmap-explorer-sls-dev-nodes
-  # Use the correct bucket name as provided
-  contentBucketName: serverless-framework-deployments-us-east-1-bdfd491e-cce3
+  # Use the correct bucket name from the main deployment
+  contentBucketName: mindmap-explorer-sls-dev-content-bucket-1386352633
   bedrockModelId: amazon.nova-micro-v1:0
   dlqName: mindmap-content-generator-dev-dlq
   eventBusName: mindmap-events-bus-${self:provider.stage}

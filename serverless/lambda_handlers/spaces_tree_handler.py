@@ -96,14 +96,14 @@ def lambda_handler(event, context):
                     'spaceId': space_id, 
                     'name': space_name, 
                     'nodes': root_nodes
-                })
+                }, default=str)  # <-- Easiest fix for Decimal serialization
             }
         except Exception as e:
             print(f"Error in spaces tree handler: {e}")
             return {
                 'statusCode': 500,
                 'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'error': f'Error processing space tree: {str(e)}'})
+                'body': json.dumps({'error': f'Error processing space tree: {str(e)}'}, default=str)
             }
 
     except Exception as e:
@@ -111,5 +111,5 @@ def lambda_handler(event, context):
         return {
             'statusCode': 500,
             'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({'error': 'Could not get space tree', 'details': str(e)})
+            'body': json.dumps({'error': 'Could not get space tree', 'details': str(e)}, default=str)
         }
