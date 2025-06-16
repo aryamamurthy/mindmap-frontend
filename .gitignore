@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# pyenv
+.python-version
+
+# VS Code
+.vscode/
+
+# AWS SAM build artifacts
+.aws-sam/
+
+# Environment variables
+.env
+.env.*
+
+
+# Ignore local credentials
+.aws/
+
+
+# Ignore Python virtual environments
+venv/
+ENV/
+.venv/
+
+
+# Ignore SAM/CloudFormation temp files
+samconfig.toml

@@ -1,0 +1,100 @@
+import json
+import boto3
+import os
+import logging
+from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
+
+def lambda_handler(event, context):
+    # Log event information
+    logger.info("Received event: %s", json.dumps(event))
+    
+    try:
+        # Get table name from environment variable
+        SPACES_TABLE_NAME = os.environ.get('SPACES_TABLE_NAME', 'MindMapSpaces')
+        logger.info(f"Using table name: {SPACES_TABLE_NAME}")
+        
+        # Create DynamoDB resource
+        dynamodb = boto3.resource('dynamodb')
+        
+        # Check if running in local environment - detect localhost in headers or specific env var
+        is_local = ('localhost' in str(event.get('headers', {})) or 
+                   'IS_LOCAL' in os.environ or 
+                   'serverless-offline' in str(event.get('requestContext', {})))
+        
+        if is_local:
+            # For local development, return mock data
+            logger.info("Running in local environment, returning mock data")
+            spaces = [
+                {
+                    "spaceId": "mock-space-1",
+                    "name": "Mock Space 1",
+                    "description": "This is a mock space for local development",
+                    "createdAt": datetime.utcnow().isoformat(),
+                    "ownerId": "local-user"
+                },
+                {
+                    "spaceId": "mock-space-2",
+                    "name": "Mock Space 2", 
+                    "description": "Another mock space for testing",
+                    "createdAt": datetime.utcnow().isoformat(),
+                    "ownerId": "local-user"
+                }
+            ]
+        else:
+            # Get owner_id from event context (or use anonymous)
+            owner_id = event.get('requestContext', {}).get('authorizer', {}).get('claims', {}).get('sub', 'ANONYMOUS_USER')
+            logger.info(f"Owner ID: {owner_id}")
+            
+            # Query spaces table using the owner_id
+            table = dynamodb.Table(SPACES_TABLE_NAME)
+            
+            # Query GSI for all spaces owned by this user
+            try:
+                response = table.query(
+                    IndexName='OwnerIdIndex',
+                    KeyConditionExpression='ownerId = :ownerId',
+                    ExpressionAttributeValues={':ownerId': owner_id}
+                )
+                logger.info(f"Query response: {response}")
+                items = response.get('Items', [])
+                
+                # Prepare spaces list
+                spaces = []
+                for item in items:
+                    if 'PK' in item and item['PK'].startswith('SPACE#'):
+                        spaces.append({
+                            'spaceId': item.get('spaceId'),
+                            'name': item.get('name'),
+                            'description': item.get('description'),
+                            'createdAt': item.get('createdAt'),
+                            'ownerId': item.get('ownerId')
+                        })
+            except Exception as db_error:
+                logger.error(f"Database error: {db_error}")
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'error': f'Database error: {str(db_error)}'})
+                }
+        
+        # Return the spaces list
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'  # CORS support
+            },
+            'body': json.dumps({'spaces': spaces})
+        }
+        
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': str(e)})
+        }

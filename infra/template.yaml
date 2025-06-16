@@ -1,0 +1,400 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Mind Map Creator API
+  SAM template for deploying the Mind Map application with Lambda, API Gateway, DynamoDB, and S3.
+
+Globals:
+  Function:
+    Runtime: python3.9 # Or your preferred Python version e.g., python3.10, python3.11
+    Timeout: 30
+    MemorySize: 256 # Increased slightly for potential larger payloads/processing
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        SPACES_TABLE_NAME: !Ref MindMapSpacesTable
+        NODES_TABLE_NAME: !Ref MindMapNodesTable
+        CONTENT_BUCKET_NAME: !Ref ContentBucket
+        # Note: For Cognito integration later, you'd add USER_POOL_ID, etc.
+    Tracing: Active # Enables AWS X-Ray tracing
+
+Parameters:
+  ContentBucketNameParameter:
+    Type: String
+    Description: "Name for the S3 bucket to store mind map node content. MUST BE GLOBALLY UNIQUE."
+    Default: "aryamaapp-content-bucket02102005" # CHANGE THIS TO A GLOBALLY UNIQUE NAME
+  SpacesTableNameParameter:
+    Type: String
+    Description: "Name for the DynamoDB table storing Spaces."
+    Default: "MindMapSpaces"
+  NodesTableNameParameter:
+    Type: String
+    Description: "Name for the DynamoDB table storing Nodes."
+    Default: "MindMapNodes"
+
+Resources:
+  # DynamoDB Tables
+  MindMapSpacesTable:
+    Type: AWS::DynamoDB::Table # Using AWS::DynamoDB::Table for more control over schema
+    Properties:
+      TableName: !Ref SpacesTableNameParameter
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: ownerId # For GSI
+          AttributeType: S
+        - AttributeName: spaceId # For GSI, if needed for other access patterns
+          AttributeType: S
+        - AttributeName: createdAt # Added for OwnerIdIndex GSI
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK # e.g., SPACE#<spaceId>
+          KeyType: HASH
+        - AttributeName: SK # e.g., META
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: OwnerIdIndex
+          KeySchema:
+            - AttributeName: ownerId
+              KeyType: HASH
+            - AttributeName: createdAt # Sort key for the GSI, useful for sorting spaces by creation time
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL # Or INCLUDE with specific attributes
+        - IndexName: SpaceIdIndex # If you need to query spaces directly by spaceId without SK
+          KeySchema:
+            - AttributeName: spaceId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST # Recommended for unpredictable workloads
+
+  MindMapNodesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref NodesTableNameParameter
+      AttributeDefinitions:
+        - AttributeName: nodeId
+          AttributeType: S
+        - AttributeName: spaceId # Also used as GSI Hash Key
+          AttributeType: S
+        - AttributeName: parentNodeId # For GSI to query children
+          AttributeType: S
+        - AttributeName: orderIndex # Added for GSIs
+          AttributeType: N
+      KeySchema:
+        - AttributeName: nodeId
+          KeyType: HASH
+        - AttributeName: spaceId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: SpaceIdNodesIndex # To get all nodes for a space
+          KeySchema:
+            - AttributeName: spaceId
+              KeyType: HASH
+            - AttributeName: orderIndex # To sort nodes by orderIndex within a space
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ParentNodeIdIndex # To get children of a node
+          KeySchema:
+            - AttributeName: parentNodeId
+              KeyType: HASH
+            - AttributeName: orderIndex # Sort children by orderIndex
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+
+  # S3 Bucket
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref ContentBucketNameParameter
+      # PublicAccessBlockConfiguration will default to block all, which is good.
+      # Add CorsConfiguration if you plan to access content directly from a web browser client
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - DELETE
+              - HEAD
+            AllowedOrigins:
+              - "*" # Restrict this in production
+            MaxAge: 3000
+    DeletionPolicy: Retain # Or Delete if you want to remove bucket on stack deletion (careful with data)
+
+  # IAM Role for Lambda Functions
+  MindMapLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: MindMapLambdaExecutionRoleSAM # Adding SAM to distinguish if you have manual one
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MindMapLambdaDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:BatchGetItem
+                Resource:
+                  - !GetAtt MindMapSpacesTable.Arn
+                  - !Sub $${MindMapSpacesTable.Arn}/index/*
+                  - !GetAtt MindMapNodesTable.Arn
+                  - !Sub $${MindMapNodesTable.Arn}/index/*
+        - PolicyName: MindMapLambdaS3Policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: "s3:*"
+                Resource: "*"
+        - PolicyName: MindMapLambdaCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: AWSXRayDaemonWriteAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: "*"
+
+  # API Gateway
+  MindMapApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: MindMapApiSAM
+      StageName: Prod # Or dev, test, etc.
+      Cors: # Enable CORS for all origins for simplicity, restrict in production
+        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      # Auth: # Placeholder for Cognito Authorizer later
+      #   DefaultAuthorizer: MyCognitoAuthorizer
+      #   Authorizers:
+      #     MyCognitoAuthorizer:
+      #       UserPoolArn: arn:aws:cognito-idp:REGION:ACCOUNT_ID:userpool/USER_POOL_ID
+      #       Identity:
+      #         Header: Authorization
+      # MethodSettings: # To ensure proxy path parameters are passed correctly
+      #   - HttpMethod: "*"
+      #     ResourcePath: "/*"
+      #     RequestParameters:
+      #       - method.request.path.proxy: true
+
+
+  # Lambda Functions
+  SpacesCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapSpacesCreateSAM
+      Handler: spaces_create_handler.lambda_handler
+      CodeUri: ../lambda_handlers/ # Relative path from this template.yaml
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        CreateSpaceApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces
+            Method: post
+            # Auth: # Uncomment if using Cognito
+            #   Authorizer: MyCognitoAuthorizer
+
+  SpacesListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapSpacesListSAM
+      Handler: spaces_list_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        ListSpacesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces
+            Method: get
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  SpacesTreeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapSpacesTreeSAM
+      Handler: spaces_tree_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        GetSpaceTreeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}
+            Method: get
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  SpacesUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapSpacesUpdateSAM
+      Handler: spaces_update_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        UpdateSpaceApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}
+            Method: put
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  SpacesDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapSpacesDeleteSAM
+      Handler: spaces_delete_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        DeleteSpaceApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}
+            Method: delete
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  NodesAddFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapNodesAddSAM
+      Handler: nodes_add_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        AddNodeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}/nodes
+            Method: post
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  NodesGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapNodesGetSAM
+      Handler: nodes_get_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        GetNodeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}/nodes/{nodeId}
+            Method: get
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  NodesUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapNodesUpdateSAM
+      Handler: nodes_update_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        UpdateNodeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}/nodes/{nodeId}
+            Method: put
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  NodesDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapNodesDeleteSAM
+      Handler: nodes_delete_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        DeleteNodeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}/nodes/{nodeId}
+            Method: delete
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+  NodesReorderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MindMapNodesReorderSAM
+      Handler: nodes_reorder_handler.lambda_handler
+      CodeUri: ../lambda_handlers/
+      Role: !GetAtt MindMapLambdaExecutionRole.Arn
+      Events:
+        ReorderNodesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MindMapApi
+            Path: /spaces/{spaceId}/nodes/reorder # Path for reordering
+            Method: post
+            # Auth:
+            #   Authorizer: MyCognitoAuthorizer
+
+Outputs:
+  MindMapApiEndpoint:
+    Description: "API Gateway endpoint URL for Mind Map service"
+    Value: !Sub "https://${MindMapApi}.execute-api.${AWS::Region}.amazonaws.com/Prod" # 'Prod' is the StageName
+  ContentBucketNameOutput:
+    Description: "Name of the S3 bucket for mind map content"
+    Value: !Ref ContentBucket
+  SpacesTableNameOutput:
+    Description: "Name of the DynamoDB table for Spaces"
+    Value: !Ref MindMapSpacesTable
+  NodesTableNameOutput:
+    Description: "Name of the DynamoDB table for Nodes"
+    Value: !Ref MindMapNodesTable
+

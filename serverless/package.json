@@ -1,0 +1,18 @@
+{
+  "name": "mindmap-explorer-sls",
+  "version": "1.0.0",
+  "description": "Mind Map Explorer Serverless Application","scripts": {
+    "deploy": "set TIMESTAMP=%RANDOM%%RANDOM% && serverless deploy --verbose",
+    "deploy:dev": "set TIMESTAMP=%RANDOM%%RANDOM% && serverless deploy --stage dev --verbose",
+    "deploy:prod": "set TIMESTAMP=%RANDOM%%RANDOM% && serverless deploy --stage prod --verbose",
+    "remove": "serverless remove",
+    "logs": "serverless logs",
+    "info": "serverless info",
+    "start": "serverless offline start",
+    "test": "cd .. && python -m pytest tests/ -v"
+  },  "devDependencies": {
+    "serverless": "^4.0.0",
+    "serverless-offline": "^14.0.0",
+    "serverless-python-requirements": "^6.0.0"
+  }
+}

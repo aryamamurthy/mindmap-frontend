@@ -1,0 +1,147 @@
+/*
+  Set background and card to light grey for both light and dark mode.
+*/
+
+@import "tw-animate-css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 96%; /* light grey */
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 98%; /* even lighter grey for cards */
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 98%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 16%; /* dark grey for dark mode */
+    --foreground: 210 40% 98%;
+    --card: 0 0% 22%; /* slightly lighter dark grey for cards */
+    --card-foreground: 210 40% 98%;
+    --popover: 0 0% 22%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 215 20.2% 65.1%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+/* Custom Tree Node Styles (can be adapted for shadcn components) */
+.tree-container {
+  padding: 0;
+}
+
+.tree-node-item {
+  margin: 0;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background-color 0.2s ease;
+}
+
+.tree-node:hover {
+  background-color: hsl(var(--accent));
+}
+
+.tree-node.selected {
+  background-color: hsl(var(--primary) / 0.1);
+  font-weight: 500;
+}
+
+.node-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.expand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  user-select: none;
+}
+
+.expand-icon:hover {
+  color: hsl(var(--foreground));
+}
+
+.node-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  font-size: 8px;
+  color: hsl(var(--muted-foreground));
+  user-select: none;
+}
+
+.node-text {
+  flex: 1;
+  font-size: 1rem;
+  color: hsl(var(--foreground));
+  line-height: 1.4;
+}
+
+.children-nodes {
+  margin-left: 8px;
+  border-left: 1px solid hsl(var(--border));
+  padding-left: 8px;
+}
+
+.left-panel-background {
+  background-color: hsl(var(--card)); 
+}
+
+.right-panel-background {
+  background-color: hsl(var(--background)); 
+}
