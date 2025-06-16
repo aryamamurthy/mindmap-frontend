@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { api, Space, TreeNode, NodeWithContent } from '../../../lib/api';
 
 // Collapsible state for each node
-function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDelete, level = 0, collapsedNodes, setCollapsedNodes }) {
+function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDelete, level = 0, collapsedNodes, setCollapsedNodes }: any) {
   const isCollapsed = collapsedNodes[node.nodeId];
   const hasChildren = node.children && node.children.length > 0;
 
@@ -14,7 +14,7 @@ function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDe
       <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
         {hasChildren && (
           <button
-            onClick={e => { e.stopPropagation(); setCollapsedNodes((prev) => ({ ...prev, [node.nodeId]: !isCollapsed })); }}
+            onClick={(e: any) => { e.stopPropagation(); setCollapsedNodes((prev: any) => ({ ...prev, [node.nodeId]: !isCollapsed })); }}
             style={{ marginRight: 8, background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
             title={isCollapsed ? 'Expand' : 'Collapse'}
           >
@@ -45,19 +45,19 @@ function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDe
           <span style={{ flex: 1 }}>{node.title}</span>
           <button
             style={{ marginLeft: 8, background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
-            onClick={e => { e.stopPropagation(); onAdd(node); }}
+            onClick={(e: any) => { e.stopPropagation(); onAdd(node); }}
             title="Add Child"
           >+
           </button>
           <button
             style={{ marginLeft: 4, background: '#fef9c3', color: '#b45309', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
-            onClick={e => { e.stopPropagation(); onEdit(node); }}
+            onClick={(e: any) => { e.stopPropagation(); onEdit(node); }}
             title="Edit Node"
           >✎
           </button>
           <button
             style={{ marginLeft: 4, background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
-            onClick={e => { e.stopPropagation(); onDelete(node); }}
+            onClick={(e: any) => { e.stopPropagation(); onDelete(node); }}
             title="Delete Node"
           >🗑
           </button>
@@ -101,7 +101,7 @@ function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDe
             width: '100%',
             marginTop: 24,
           }} />
-          {node.children.map((child, idx) => (
+          {node.children.map((child: any, idx: any) => (
             <div key={child.nodeId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
               {/* Draw vertical line from horizontal to child */}
               <div style={{
@@ -133,7 +133,7 @@ function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDe
   );
 }
 
-function Modal({ open, onClose, children }) {
+function Modal({ open, onClose, children }: any) {
   if (!open) return null;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
@@ -145,7 +145,7 @@ function Modal({ open, onClose, children }) {
   );
 }
 
-export default function SpaceViewer({ params }) {
+export default function SpaceViewer({ params }: any) {
   const [space, setSpace] = useState<Space | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [selectedNodeContent, setSelectedNodeContent] = useState<NodeWithContent | null>(null);
@@ -179,65 +179,63 @@ export default function SpaceViewer({ params }) {
     }
   };
 
-  const handleSelectNode = async (node: TreeNode) => {
+  const handleSelectNode = async (node: any) => {
     setSelectedNode(node);
     setSelectedNodeContent(null);
     setShowContentModal(true);
     try {
-      const nodeWithContent = await api.getNode(space?.spaceId, node.nodeId);
+      const nodeWithContent = await api.getNode(space!.spaceId, node.nodeId);
       setSelectedNodeContent(nodeWithContent);
     } catch {
       setSelectedNodeContent(null);
     }
   };
-
-  const handleAddNode = (parentNode) => {
-    setModal({ type: 'add', node: parentNode });
+  const handleAddNode = (parentNode: any) => {
+    setModal({ type: 'add', node: parentNode } as any);
     setInputValue('');
     setContentValue('');
   };
-  const handleEditNode = async (node) => {
-    setModal({ type: 'edit', node });
+  const handleEditNode = async (node: any) => {
+    setModal({ type: 'edit', node } as any);
     setInputValue(node.title);
     // fetch content for editing
     try {
-      const nodeWithContent = await api.getNode(space.spaceId, node.nodeId);
+      const nodeWithContent = await api.getNode(space!.spaceId, node.nodeId);
       setContentValue(nodeWithContent.content || '');
     } catch {
       setContentValue('');
     }
   };
-  const handleDeleteNode = (node) => {
-    setModal({ type: 'delete', node });
+  const handleDeleteNode = (node: any) => {
+    setModal({ type: 'delete', node } as any);
   };
   const handleModalClose = () => {
-    setModal({ type: null, node: null });
+    setModal({ type: null, node: null } as any);
     setInputValue('');
     setContentValue('');
   };
-
-  const submitAddNode = async (e) => {
+  const submitAddNode = async (e: any) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
     try {
-      await api.createNode(space.spaceId, inputValue.trim(), modal.node ? modal.node.nodeId : undefined);
+      await api.createNode(space!.spaceId, inputValue.trim(), (modal as any).node ? (modal as any).node.nodeId : undefined);
       handleModalClose();
       window.location.reload(); // Reload after add
     } catch {}
   };
-  const submitEditNode = async (e) => {
+  const submitEditNode = async (e: any) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
     try {
-      await api.updateNode(space.spaceId, modal.node.nodeId, inputValue.trim(), contentValue);
+      await api.updateNode(space!.spaceId, (modal as any).node.nodeId, inputValue.trim(), contentValue);
       handleModalClose();
       window.location.reload(); // Reload after edit
     } catch {}
   };
-  const submitDeleteNode = async (e) => {
+  const submitDeleteNode = async (e: any) => {
     e.preventDefault();
     try {
-      await api.deleteNode(space.spaceId, modal.node.nodeId);
+      await api.deleteNode(space!.spaceId, (modal as any).node.nodeId);
       handleModalClose();
       window.location.reload(); // Reload after delete
     } catch {}
