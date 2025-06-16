@@ -4,425 +4,388 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api, Space, TreeNode, NodeWithContent } from '../../../lib/api';
 
-interface SpaceViewerProps {
-  params: Promise<{ id: string }>;
+// Collapsible state for each node
+function TreeNodeComponent({ node, selectedNodeId, onSelect, onAdd, onEdit, onDelete, level = 0, collapsedNodes, setCollapsedNodes }) {
+  const isCollapsed = collapsedNodes[node.nodeId];
+  const hasChildren = node.children && node.children.length > 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+        {hasChildren && (
+          <button
+            onClick={e => { e.stopPropagation(); setCollapsedNodes((prev) => ({ ...prev, [node.nodeId]: !isCollapsed })); }}
+            style={{ marginRight: 8, background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
+            title={isCollapsed ? 'Expand' : 'Collapse'}
+          >
+            {isCollapsed ? '+' : '–'}
+          </button>
+        )}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            minWidth: 180,
+            background: selectedNodeId === node.nodeId ? '#e0e7ef' : level === 0 ? '#2563eb' : '#fff',
+            color: selectedNodeId === node.nodeId ? '#2563eb' : level === 0 ? '#fff' : '#1a202c',
+            border: selectedNodeId === node.nodeId ? '2px solid #2563eb' : '1px solid #d1d5db',
+            borderRadius: 8,
+            padding: '10px 20px',
+            fontWeight: selectedNodeId === node.nodeId ? 700 : 500,
+            boxShadow: selectedNodeId === node.nodeId ? '0 2px 8px #2563eb22' : '0 1px 4px #0001',
+            cursor: 'pointer',
+            transition: 'background 0.2s, color 0.2s',
+            marginBottom: 8,
+            marginTop: level === 0 ? 0 : 16,
+            position: 'relative',
+            zIndex: 2,
+          }}
+          onClick={() => onSelect(node)}
+        >
+          <span style={{ flex: 1 }}>{node.title}</span>
+          <button
+            style={{ marginLeft: 8, background: '#e0e7ef', color: '#2563eb', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
+            onClick={e => { e.stopPropagation(); onAdd(node); }}
+            title="Add Child"
+          >+
+          </button>
+          <button
+            style={{ marginLeft: 4, background: '#fef9c3', color: '#b45309', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
+            onClick={e => { e.stopPropagation(); onEdit(node); }}
+            title="Edit Node"
+          >✎
+          </button>
+          <button
+            style={{ marginLeft: 4, background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}
+            onClick={e => { e.stopPropagation(); onDelete(node); }}
+            title="Delete Node"
+          >🗑
+          </button>
+        </div>
+      </div>
+      {/* Draw vertical line from parent to this node */}
+      {level > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: -24,
+          left: '50%',
+          width: 2,
+          height: 24,
+          background: '#d1d5db',
+          transform: 'translateX(-50%)',
+          zIndex: 1,
+        }} />
+      )}
+      {/* Draw horizontal lines to children */}
+      {hasChildren && !isCollapsed && (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          width: '100%',
+          gap: 24,
+          marginTop: 8,
+          flexWrap: 'wrap',
+          position: 'relative',
+        }}>
+          {/* Horizontal line connecting all children */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            background: '#d1d5db',
+            zIndex: 0,
+            width: '100%',
+            marginTop: 24,
+          }} />
+          {node.children.map((child, idx) => (
+            <div key={child.nodeId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+              {/* Draw vertical line from horizontal to child */}
+              <div style={{
+                width: 2,
+                height: 24,
+                background: '#d1d5db',
+                position: 'absolute',
+                top: 0,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1,
+              }} />
+              <TreeNodeComponent
+                node={child}
+                selectedNodeId={selectedNodeId}
+                onSelect={onSelect}
+                onAdd={onAdd}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                level={level + 1}
+                collapsedNodes={collapsedNodes}
+                setCollapsedNodes={setCollapsedNodes}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-export default function SpaceViewer({ params }: SpaceViewerProps) {
-  const [spaceId, setSpaceId] = useState<string>('');
+function Modal({ open, onClose, children }) {
+  if (!open) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: 'white', borderRadius: 12, padding: 32, minWidth: 320, boxShadow: '0 4px 24px #0002', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 12, right: 16, background: 'none', border: 'none', fontSize: 20, color: '#6b7280', cursor: 'pointer' }}>×</button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function SpaceViewer({ params }) {
   const [space, setSpace] = useState<Space | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [selectedNodeContent, setSelectedNodeContent] = useState<NodeWithContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingContent, setLoadingContent] = useState(false);
-  const [newNodeTitle, setNewNodeTitle] = useState('');
-  const [showAddNode, setShowAddNode] = useState(false);
-  const [addingNode, setAddingNode] = useState(false);
+  const [modal, setModal] = useState({ type: null, node: null });
+  const [inputValue, setInputValue] = useState('');
+  const [contentValue, setContentValue] = useState('');
+  const [collapsedNodes, setCollapsedNodes] = useState({});
+  const [showContentModal, setShowContentModal] = useState(false);
 
   // Handle async params
   useEffect(() => {
     const resolveParams = async () => {
       const resolvedParams = await params;
-      setSpaceId(resolvedParams.id);
+      loadSpace(resolvedParams.id);
     };
     resolveParams();
   }, [params]);
 
-  useEffect(() => {
-    if (spaceId) {
-      loadSpace();
-    }
-  }, [spaceId]);
-
-  const loadSpace = async () => {
-    if (!spaceId) return;
-    
+  const loadSpace = async (spaceId: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const spaceData = await api.getSpaceTree(spaceId);
       setSpace(spaceData);
     } catch (err) {
-      console.error('Error loading space:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load space');
+      setError('Failed to load space');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNodeClick = async (node: TreeNode) => {
+  const handleSelectNode = async (node: TreeNode) => {
     setSelectedNode(node);
-    setLoadingContent(true);
     setSelectedNodeContent(null);
-    
+    setShowContentModal(true);
     try {
-      const nodeWithContent = await api.getNode(spaceId, node.nodeId);
+      const nodeWithContent = await api.getNode(space?.spaceId, node.nodeId);
       setSelectedNodeContent(nodeWithContent);
-    } catch (err) {
-      console.error('Error loading node content:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load node content');
-    } finally {
-      setLoadingContent(false);
+    } catch {
+      setSelectedNodeContent(null);
     }
   };
 
-  const handleAddNode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newNodeTitle.trim()) return;
-
+  const handleAddNode = (parentNode) => {
+    setModal({ type: 'add', node: parentNode });
+    setInputValue('');
+    setContentValue('');
+  };
+  const handleEditNode = async (node) => {
+    setModal({ type: 'edit', node });
+    setInputValue(node.title);
+    // fetch content for editing
     try {
-      setAddingNode(true);
-      setError(null);
-      const parentNodeId = selectedNode?.nodeId;
-      const newNode = await api.createNode(spaceId, newNodeTitle.trim(), parentNodeId);
-      
-      // Reload the space to get updated tree structure
-      await loadSpace();
-      
-      // Select the new node
-      const newTreeNode: TreeNode = {
-        ...newNode,
-        children: []
-      };
-      setSelectedNode(newTreeNode);
-      setSelectedNodeContent(newNode);
-      
-      setNewNodeTitle('');
-      setShowAddNode(false);
-    } catch (err) {
-      console.error('Error creating node:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create node');
-    } finally {
-      setAddingNode(false);
+      const nodeWithContent = await api.getNode(space.spaceId, node.nodeId);
+      setContentValue(nodeWithContent.content || '');
+    } catch {
+      setContentValue('');
     }
   };
+  const handleDeleteNode = (node) => {
+    setModal({ type: 'delete', node });
+  };
+  const handleModalClose = () => {
+    setModal({ type: null, node: null });
+    setInputValue('');
+    setContentValue('');
+  };
 
-  const renderNode = (node: TreeNode, depth: number = 0) => {
-    const isSelected = selectedNode?.nodeId === node.nodeId;
-    
-    return (
-      <div key={node.nodeId} style={{ marginLeft: `${depth * 20}px` }}>
-        <div
-          className={`node-item ${isSelected ? 'selected' : ''}`}
-          onClick={() => handleNodeClick(node)}
-        >
-          <div style={{ fontWeight: isSelected ? 'bold' : 'normal' }}>
-            {node.title}
-          </div>
-          <div style={{ fontSize: '0.8em', color: '#666', marginTop: '5px' }}>
-            Created: {new Date(node.createdAt).toLocaleDateString()}
-            {node.updatedAt && ` • Updated: ${new Date(node.updatedAt).toLocaleDateString()}`}
-          </div>
-        </div>
-        {node.children && node.children.map(child => renderNode(child, depth + 1))}
-      </div>
-    );
+  const submitAddNode = async (e) => {
+    e.preventDefault();
+    if (!inputValue.trim()) return;
+    try {
+      await api.createNode(space.spaceId, inputValue.trim(), modal.node ? modal.node.nodeId : undefined);
+      handleModalClose();
+      window.location.reload(); // Reload after add
+    } catch {}
+  };
+  const submitEditNode = async (e) => {
+    e.preventDefault();
+    if (!inputValue.trim()) return;
+    try {
+      await api.updateNode(space.spaceId, modal.node.nodeId, inputValue.trim(), contentValue);
+      handleModalClose();
+      window.location.reload(); // Reload after edit
+    } catch {}
+  };
+  const submitDeleteNode = async (e) => {
+    e.preventDefault();
+    try {
+      await api.deleteNode(space.spaceId, modal.node.nodeId);
+      handleModalClose();
+      window.location.reload(); // Reload after delete
+    } catch {}
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen">
-        <div className="header">
-          <div className="container">
-            <h1>Loading Space...</h1>
-          </div>
-        </div>
-        <div className="container">
-          <div className="loading">Loading space data...</div>
-        </div>
+      <div style={{ minHeight: '100vh', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, Arial, sans-serif' }}>
+        <div style={{ textAlign: 'center', color: '#2563eb' }}>Loading Space...</div>
       </div>
     );
   }
 
-  if (error && !space) {
+  if (error || !space) {
     return (
-      <div className="min-h-screen">
-        <div className="header">
-          <div className="container">
-            <h1>Error</h1>
-          </div>
-        </div>
-        <div className="container">
-          <div className="error">
-            {error}
-            <div style={{ marginTop: '10px' }}>
-              <button onClick={loadSpace} className="btn btn-secondary">
-                Retry
-              </button>
-              <Link href="/spaces" className="btn btn-primary" style={{ marginLeft: '10px', textDecoration: 'none' }}>
-                Back to Spaces
-              </Link>
-            </div>
-          </div>
-        </div>
+      <div style={{ minHeight: '100vh', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, Arial, sans-serif' }}>
+        <div style={{ textAlign: 'center', color: '#b91c1c', background: 'white', padding: 32, borderRadius: 12, boxShadow: '0 2px 8px #0001' }}>{error || 'Space not found.'}</div>
       </div>
     );
   }
 
-  if (!space) {
-    return (
-      <div className="min-h-screen">
-        <div className="header">
-          <div className="container">
-            <h1>Space Not Found</h1>
-          </div>
-        </div>
-        <div className="container">
-          <div className="error">
-            Space not found or you don't have access to it.
-            <div style={{ marginTop: '10px' }}>
-              <Link href="/spaces" className="btn btn-primary" style={{ textDecoration: 'none' }}>
-                Back to Spaces
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // Responsive container for the whole page
   return (
-    <div className="min-h-screen">
-      <div className="header">
-        <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <Link href="/spaces" style={{ textDecoration: 'none', color: '#007bff', fontSize: '0.9em' }}>
-                ← Back to Spaces
-              </Link>
-              <h1 style={{ margin: '5px 0' }}>{space.name}</h1>
-              {space.description && (
-                <p style={{ color: '#666', margin: 0 }}>{space.description}</p>
-              )}
-            </div>
-            <div>
-              <button 
-                onClick={() => setShowAddNode(true)}
-                className="btn btn-primary"
-                disabled={addingNode}
-              >
-                Add Node
-              </button>
-              <button 
-                onClick={loadSpace}
-                className="btn btn-secondary"
-                style={{ marginLeft: '10px' }}
-                disabled={loading}
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container">
-        {error && (
-          <div className="error">
-            {error}
-            <button 
-              onClick={() => setError(null)} 
-              style={{ marginLeft: '10px', background: 'none', border: 'none', color: '#721c24', cursor: 'pointer' }}
+    <div style={{ background: '#e5e7eb', fontFamily: 'Inter, Arial, sans-serif', minHeight: '100vh', width: '100vw', margin: 0, padding: 0 }}>
+      <div style={{ width: '100%', maxWidth: '100vw', margin: 0, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: 0 }}>
+        {/* Mind Map Tree - now much larger and fills the page */}
+        <div style={{ flex: 1, background: '#f3f4f6', borderRadius: 16, boxShadow: '0 2px 12px #0001', padding: 48, minHeight: '90vh', minWidth: 0, width: '100%', maxWidth: 1600, overflow: 'auto', margin: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <h2 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#2563eb', textAlign: 'center' }}>{space.name}</h2>
+            <button
+              style={{ background: '#2563eb', color: 'white', padding: '12px 28px', borderRadius: 8, fontWeight: 600, fontSize: 18, border: 'none', cursor: 'pointer', marginLeft: 16 }}
+              onClick={() => handleAddNode(null)}
             >
-              ×
+              + Add Root Node
             </button>
           </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
-          {/* Tree Structure */}
-          <div className="card">
-            <h2>Mind Map Structure</h2>
-            {!space.nodes || space.nodes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                <div style={{ fontSize: '3em', marginBottom: '15px' }}>🌳</div>
-                <h3>No nodes yet</h3>
-                <p>Start building your mind map by adding the first node.</p>
-                <button 
-                  onClick={() => setShowAddNode(true)}
-                  className="btn btn-primary"
-                  style={{ marginTop: '15px' }}
-                >
-                  Add First Node
-                </button>
-              </div>
-            ) : (
-              <div className="tree-view">
-                {space.nodes.map(node => renderNode(node))}
-              </div>
-            )}
-          </div>
-
-          {/* Node Content */}
-          <div className="card">
-            <h2>Node Details</h2>
-            {!selectedNode ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                <div style={{ fontSize: '3em', marginBottom: '15px' }}>📝</div>
-                <h3>Select a node</h3>
-                <p>Click on a node in the tree to view its details and content.</p>
-              </div>
-            ) : (
-              <div>
-                <h3>{selectedNode.title}</h3>
-                <div style={{ fontSize: '0.9em', color: '#666', marginBottom: '20px' }}>
-                  <div>Node ID: {selectedNode.nodeId}</div>
-                  <div>Created: {new Date(selectedNode.createdAt).toLocaleDateString()}</div>
-                  {selectedNode.updatedAt && (
-                    <div>Updated: {new Date(selectedNode.updatedAt).toLocaleDateString()}</div>
-                  )}
-                  {selectedNode.parentNodeId && (
-                    <div>Parent: {selectedNode.parentNodeId}</div>
-                  )}
-                </div>
-
-                {loadingContent ? (
-                  <div className="loading">Loading content...</div>
-                ) : selectedNodeContent ? (
-                  <div>
-                    {selectedNodeContent.contentHTML ? (
-                      <div className="node-content">
-                        <h4>Generated Content:</h4>
-                        <div 
-                          dangerouslySetInnerHTML={{ __html: selectedNodeContent.contentHTML }}
-                          style={{ marginTop: '10px' }}
-                        />
-                      </div>
-                    ) : selectedNodeContent.content ? (
-                      <div className="node-content">
-                        <h4>Content:</h4>
-                        <div style={{ marginTop: '10px', whiteSpace: 'pre-wrap' }}>
-                          {selectedNodeContent.content}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ color: '#666', fontStyle: 'italic' }}>
-                        No content available for this node.
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: '20px' }}>
-                      <button 
-                        onClick={() => setShowAddNode(true)}
-                        className="btn btn-primary"
-                      >
-                        Add Child Node
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="error">
-                    Failed to load node content.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Add Node Modal */}
-        {showAddNode && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}>
-            <div style={{
-              backgroundColor: 'white',
-              padding: '30px',
-              borderRadius: '8px',
-              width: '90%',
-              maxWidth: '500px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-            }}>
-              <h2 style={{ marginBottom: '20px' }}>
-                Add New Node
-                {selectedNode && (
-                  <div style={{ fontSize: '0.9em', color: '#666', fontWeight: 'normal' }}>
-                    Parent: {selectedNode.title}
-                  </div>
-                )}
-              </h2>
-              <form onSubmit={handleAddNode}>
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                    Node Title *
-                  </label>
-                  <input
-                    type="text"
-                    value={newNodeTitle}
-                    onChange={(e) => setNewNodeTitle(e.target.value)}
-                    placeholder="Enter node title..."
-                    required
-                    disabled={addingNode}
-                    autoFocus
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddNode(false);
-                      setNewNodeTitle('');
-                      setError(null);
-                    }}
-                    className="btn btn-secondary"
-                    disabled={addingNode}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={addingNode || !newNodeTitle.trim()}
-                  >
-                    {addingNode ? 'Creating...' : 'Create Node'}
-                  </button>
-                </div>
-              </form>
+          {space.nodes && space.nodes.length > 0 ? (
+            <div style={{ marginTop: 16 }}>
+              {space.nodes.map(node => (
+                <TreeNodeComponent
+                  key={node.nodeId}
+                  node={node}
+                  selectedNodeId={selectedNode?.nodeId}
+                  onSelect={handleSelectNode}
+                  onAdd={handleAddNode}
+                  onEdit={handleEditNode}
+                  onDelete={handleDeleteNode}
+                  collapsedNodes={collapsedNodes}
+                  setCollapsedNodes={setCollapsedNodes}
+                />
+              ))}
             </div>
-          </div>
-        )}
-
-        {/* Space Info */}
-        <div className="card" style={{ marginTop: '20px' }}>
-          <h3>Space Information</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '15px' }}>
-            <div>
-              <strong>Space ID:</strong><br />
-              <span style={{ color: '#666', fontSize: '0.9em' }}>{space.spaceId}</span>
-            </div>
-            <div>
-              <strong>Created:</strong><br />
-              <span style={{ color: '#666', fontSize: '0.9em' }}>
-                {new Date(space.createdAt).toLocaleDateString()}
-              </span>
-            </div>
-            {space.updatedAt && (
-              <div>
-                <strong>Last Updated:</strong><br />
-                <span style={{ color: '#666', fontSize: '0.9em' }}>
-                  {new Date(space.updatedAt).toLocaleDateString()}
-                </span>
-              </div>
-            )}
-            <div>
-              <strong>Total Nodes:</strong><br />
-              <span style={{ color: '#666', fontSize: '0.9em' }}>
-                {space.nodes ? space.nodes.length : 0}
-              </span>
-            </div>
-          </div>
+          ) : (
+            <div style={{ color: '#6b7280', textAlign: 'center', marginTop: 48 }}>No nodes yet. Add your first node!</div>
+          )}
         </div>
       </div>
+      {/* Add/Edit/Delete Modals */}
+      <Modal open={modal.type === 'add'} onClose={handleModalClose}>
+        <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: '#2563eb' }}>Add Node</h3>
+        <form onSubmit={submitAddNode}>
+          <input
+            type="text"
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            placeholder="Node title"
+            style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '10px 12px', fontSize: 16, outline: 'none', marginBottom: 16 }}
+            required
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <button type="button" onClick={handleModalClose} style={{ background: '#e5e7eb', color: '#1f2937', padding: '8px 20px', borderRadius: 8, fontWeight: 600, fontSize: 16, border: 'none', cursor: 'pointer' }}>Cancel</button>
+            <button type="submit" style={{ background: '#2563eb', color: 'white', padding: '8px 20px', borderRadius: 8, fontWeight: 600, fontSize: 16, border: 'none', cursor: 'pointer' }}>Add</button>
+          </div>
+        </form>
+      </Modal>
+      <Modal open={modal.type === 'edit'} onClose={handleModalClose}>
+        <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: '#b45309' }}>Edit Node</h3>
+        <form onSubmit={submitEditNode}>
+          <input
+            type="text"
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            placeholder="Node title"
+            style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '10px 12px', fontSize: 16, outline: 'none', marginBottom: 16 }}
+            required
+          />
+          <textarea
+            value={contentValue}
+            onChange={e => setContentValue(e.target.value)}
+            placeholder="Node content (optional)"
+            rows={5}
+            style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '10px 12px', fontSize: 16, outline: 'none', marginBottom: 16, resize: 'vertical' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <button type="button" onClick={handleModalClose} style={{ background: '#e5e7eb', color: '#1f2937', padding: '8px 20px', borderRadius: 8, fontWeight: 600, fontSize: 16, border: 'none', cursor: 'pointer' }}>Cancel</button>
+            <button type="submit" style={{ background: '#b45309', color: 'white', padding: '8px 20px', borderRadius: 8, fontWeight: 600, fontSize: 16, border: 'none', cursor: 'pointer' }}>Save</button>
+          </div>
+        </form>
+      </Modal>
+      <Modal open={modal.type === 'delete'} onClose={handleModalClose}>
+        <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: '#b91c1c' }}>Delete Node</h3>
+        <p style={{ color: '#b91c1c', marginBottom: 24 }}>Are you sure you want to delete this node? This action cannot be undone.</p>
+        <form onSubmit={submitDeleteNode}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <button type="button" onClick={handleModalClose} style={{ background: '#e5e7eb', color: '#1f2937', padding: '8px 20px', borderRadius: 8, fontWeight: 600, fontSize: 16, border: 'none', cursor: 'pointer' }}>Cancel</button>
+            <button type="submit" style={{ background: '#b91c1c', color: 'white', padding: '8px 20px', borderRadius: 8, fontWeight: 600, fontSize: 16, border: 'none', cursor: 'pointer' }}>Delete</button>
+          </div>
+        </form>
+      </Modal>
+      {/* Node Content Modal - responsive */}
+      <Modal open={showContentModal && selectedNode && selectedNodeContent} onClose={() => setShowContentModal(false)}>
+        <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: '#2563eb', wordBreak: 'break-word' }}>{selectedNode?.title}</h3>
+        <div style={{ color: '#6b7280', fontSize: 14, marginBottom: 8, wordBreak: 'break-all' }}>Node ID: {selectedNode?.nodeId}</div>
+        {selectedNodeContent && (
+          <div style={{
+            marginTop: 16,
+            background: '#f3f4f6',
+            borderRadius: 8,
+            padding: 16,
+            color: '#1a202c',
+            fontSize: 15,
+            boxShadow: '0 1px 4px #0001',
+            maxWidth: '70vw',
+            maxHeight: '50vh',
+            overflowY: 'auto',
+            wordBreak: 'break-word',
+          }}>
+            {selectedNodeContent.contentHTML ? (
+              <div dangerouslySetInnerHTML={{ __html: selectedNodeContent.contentHTML }} />
+            ) : selectedNodeContent.content ? (
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>{selectedNodeContent.content}</pre>
+            ) : (
+              <span style={{ color: '#b91c1c' }}>No content available for this node.</span>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
+
+// Helper function to count all nodes recursively (remains the same)
+const countTotalNodes = (nodes: TreeNode[]): number => {
+  let count = nodes.length;
+  for (const node of nodes) {
+    if (node.children) {
+      count += countTotalNodes(node.children);
+    }
+  }
+  return count;
+};
